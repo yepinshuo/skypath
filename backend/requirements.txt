@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+# Provides the IANA timezone database for stdlib `zoneinfo` on slim images,
+# which is required for the spec's local-time / timezone duration math.
+tzdata==2024.2
