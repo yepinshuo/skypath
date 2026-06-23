@@ -12,4 +12,8 @@ docker-compose up
 
 Skeleton in place
 
+## Error handling
+
+Dealing with data issues - "JKF" to "JFK", prices with string format.
+
 

@@ -26,9 +26,10 @@ async def lifespan(app: FastAPI):
     """Load the dataset once when the service starts."""
     repository.load(config.DATA_FILE)
     logger.info(
-        "Loaded dataset: %d airports, %d flights",
+        "Loaded dataset: %d airports, %d flights (%d skipped)",
         repository.airport_count,
         repository.flight_count,
+        repository.skipped_count,
     )
     yield
 

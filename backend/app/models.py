@@ -14,7 +14,7 @@ the client needs.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Domain models (mirror flights.json) ---------------------------------
@@ -47,6 +47,21 @@ class Flight(BaseModel):
     arrivalTime: str
     price: float
     aircraft: str
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _coerce_price(cls, v: object) -> float:
+        """Normalize price to a float.
+
+        The dataset stores price inconsistently: most rows are numbers, but a
+        few are strings (e.g. "289.00", "99"). We coerce explicitly rather than
+        relying on implicit parsing, so the behavior is intentional and survives
+        if the model is ever switched to strict mode. Unparseable values raise a
+        validation error and the row is skipped by the loader.
+        """
+        if isinstance(v, str):
+            v = v.strip()
+        return float(v)
 
 
 # --- API response models -------------------------------------------------
