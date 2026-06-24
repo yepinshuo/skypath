@@ -1,17 +1,79 @@
 # SkyPath — Flight Connection Search Engine
 
-> Prototype flight connection search engine. **Work in progress** — this README
-> is a placeholder and will be filled in last (architecture, tradeoffs, and
-> "what I'd improve" reflections written once the project is complete).
+A prototype flight-connection search engine: given a dataset of flight
+schedules, find valid one-way itineraries between two airports on a date —
+direct or with up to two connecting stops — with timezone, layover, and
+connection rules applied. FastAPI backend, React + Vite frontend, run together
+with Docker Compose.
 
 ## Run
 
+**Prerequisites:** Docker Desktop (or Docker Engine + Compose v2). Nothing else
+needs to be installed locally — both services build inside containers.
+
 ```bash
-docker-compose up
+docker-compose up      # The older v1 hyphenated command. 
+# "docker compose up" also works for compose v2 (bundled with Docker Desktop)
 ```
 
-- Backend (FastAPI): http://localhost:8000 — health check at `/health`
-- Frontend (Vite/React): http://localhost:5173
+Then open:
+
+- Frontend (React/Vite): http://localhost:5173
+- Backend (FastAPI): http://localhost:8000 — interactive docs at `/docs`, health check at `/health`
+
+The dataset (`flights.json`) is mounted into the backend and loaded on startup.
+To run the test suite locally, see [Tests](#tests).
+
+> Note: the images copy the source at build time rather than bind-mounting it,
+> so after editing code locally, re-run `docker compose up --build` to pick up
+> the changes.
+
+## Architecture
+
+Two services orchestrated by Docker Compose:
+
+- **Backend** — Python + FastAPI. Loads the dataset once into an in-memory
+  repository, exposes a single `/search` endpoint, and runs the connection
+  search. Chosen for fast, type-checked API development, and because the
+  standard library's `zoneinfo` covers the timezone math the spec needs with no
+  extra runtime dependency beyond the IANA database.
+- **Frontend** — React + Vite single-page app that calls `/search` and renders
+  itineraries. Vite gives an instant dev loop and a small build.
+
+The dataset is small (~300 flights, 25 airports) and read-only, so it lives
+entirely in memory, indexed by origin airport — no database. This keeps the
+prototype simple and the search fast.
+
+```
+skypath/
+├── backend/
+│   ├── app/
+│   │   ├── config.py     # connection-rule constants + settings
+│   │   ├── models.py     # Pydantic domain + API models
+│   │   ├── data.py       # dataset loading + in-memory indexes
+│   │   ├── search.py     # connection-search algorithm
+│   │   └── main.py       # FastAPI app, validation, /search + /health
+│   ├── tests/            # pytest suite for the six instruction cases
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── requirements-dev.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/    # SearchForm, Results, Itinerary (route strip)
+│   │   ├── api.js         # backend client
+│   │   ├── format.js      # duration / time helpers
+│   │   ├── App.jsx        # search lifecycle state
+│   │   └── styles.css     # design tokens + component styles
+│   └── Dockerfile
+├── docker-compose.yml
+├── flights.json
+└── README.md
+```
+
+**Request flow:** the form validates input client-side, calls `GET /search`,
+which validates again server-side, runs the search over the in-memory index, and
+returns itineraries sorted by total travel time as JSON; the frontend renders
+each as a route strip.
 
 ## API
 
@@ -173,14 +235,47 @@ pip install -r requirements.txt -r requirements-dev.txt
 pytest
 ```
 
-## Status
+Requires Python 3.10+ (FastAPI / Pydantic v2). Easiest inside a fresh
+virtualenv or conda env so it doesn't collide with other installs.
 
-Feature-complete prototype: the timezone-aware dataset loader (with the
-data-handling decisions above), the connection-search algorithm, the validated
-`/search` endpoint, and the React frontend (search form, route-strip results,
-and the loading / empty / error / validation states). Backend verified against
-all six instruction test cases, an exhaustive all-pairs invariant sweep, and
-full endpoint error-path coverage; the frontend builds clean and its rendering
-logic is checked against live API responses. Remaining: a final polish pass and
-expanding this README into the full architecture / tradeoffs / "what I'd improve"
-write-up.
+## Tradeoffs & assumptions
+
+Project-level choices and the assumptions made where the spec was open-ended
+(per-decision tradeoffs are noted inline in the sections above).
+
+**Assumptions made on ambiguous points:**
+
+- "Date" constrains the *first* flight's local departure date; connections may
+  cross midnight.
+- Same origin and destination is treated as a 400 validation error (the spec
+  allowed either empty results or an error).
+- An unknown but well-formed airport code is a 404; malformed input is a 400.
+- Searches are one-way only, reflected in the UI by a one-directional arrow.
+- The unresolvable code `JKF` is auto-corrected to `JFK` as an unambiguous
+  transposition rather than dropped.
+
+**Tradeoffs accepted for a prototype:**
+
+- In-memory, single-process, loaded once at startup — simple and fast for a
+  fixed read-only dataset, but wouldn't survive a large/changing schedule or
+  horizontal scaling without externalizing the data.
+- The search recomputes on every request with no caching — fine at ~300 flights;
+  a larger schedule would want precomputed indices or result caching.
+- No result pagination/limit, no auth, and permissive CORS — acceptable locally,
+  not production-ready.
+- The frontend serves the Vite dev server in its container rather than a
+  production static build behind nginx.
+
+## What I'd improve with more time
+
+- **Sort/filter controls** — let users re-sort by price or stops and filter by
+  departure window; add result limits.
+- **Richer time display** — show timezone labels alongside local times, not just
+  the `+1` day badges.
+- **Deeper tests** — unit tests for the search internals (layover boundary
+  values, domestic/international classification) and a few frontend component
+  tests, on top of the endpoint-level instruction cases.
+- **Dev ergonomics** — bind-mount volumes in Compose so local edits hot-reload
+  without a rebuild.
+- **Scale path** — if the dataset grew, move to a precomputed connection graph or
+  a datastore, and add caching and observability.
