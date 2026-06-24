@@ -1,6 +1,8 @@
 # SkyPath — Flight Connection Search Engine
 
-> Prototype flight connection search engine. **Work in progress**
+> Prototype flight connection search engine. **Work in progress** — this README
+> is a placeholder and will be filled in last (architecture, tradeoffs, and
+> "what I'd improve" reflections written once the project is complete).
 
 ## Run
 
@@ -35,6 +37,37 @@ GET /health
 
 Errors use FastAPI's standard `{"detail": "..."}` shape so the frontend can
 display the message directly.
+
+## Frontend
+
+React + Vite single-page app that talks to the `/search` endpoint.
+
+**Visual direction.** A "modern timetable": deep navy ink on cool paper with one
+marigold accent, Space Grotesk for signage and airport codes, Inter with tabular
+numerals for timetable-aligned data. Deliberately avoids the warm-cream/serif
+look so it reads as a purpose-built travel tool.
+
+**Signature element — the route strip.** Each itinerary is drawn as its airport
+codes joined by flight legs, with an amber layover bead at every stop, so direct
+vs. 1-stop vs. 2-stop is legible at a glance. A compact segment list underneath
+carries the full detail the spec asks for (each leg's flight number, times,
+airports, duration, price, and the layover between legs).
+
+**The four required states.** Client-side validation blocks malformed searches
+with field-level messages before any request goes out (3-letter codes,
+origin ≠ destination, date required); a shimmer skeleton covers loading; the
+empty state explains *why* nothing matched and suggests a next step; API errors
+surface the backend's `detail` message verbatim. Server-side validation still
+runs regardless, so the two layers agree.
+
+**Day rollovers.** Arrivals that land on a later calendar day than the first
+departure get a `+1`/`+2` badge, which is what makes the SYD→LAX date-line and
+overnight connections readable.
+
+**Notes.** The form pre-fills `JFK → LAX` on `2024-03-15` so the tool returns
+results on first load (the dataset only covers that date). The backend base URL
+comes from `VITE_API_BASE_URL` (set by docker-compose), falling back to
+localhost for local dev.
 
 ## Search & connection logic
 
@@ -126,12 +159,28 @@ Most prices are numbers, but a few rows store price as a string (e.g. `"289.00"`
   validation error and that row is skipped, consistent with the bad-row policy
   above.
 
+## Tests
+
+The backend ships a pytest suite covering the six test cases from the
+instructions (`backend/tests/`), exercised through the HTTP endpoint so they
+also cover request validation and the response shape. The tests read the dataset
+independently of the app to check connection rules (e.g. the domestic vs.
+international layover minimum) rather than trusting the code under test.
+
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
 ## Status
 
-Done: project skeleton, the timezone-aware dataset loader (with the
-data-handling decisions above), the connection-search algorithm, and the HTTP
-`/search` endpoint with input validation and the sorted `SearchResponse` shape.
-Verified against all six instruction test cases, an exhaustive all-pairs
-invariant sweep, and full endpoint error-path coverage. Still to come: the
-frontend UI. The architecture overview, tradeoffs, and "what I'd improve with
-more time" reflections will be written last.
+Feature-complete prototype: the timezone-aware dataset loader (with the
+data-handling decisions above), the connection-search algorithm, the validated
+`/search` endpoint, and the React frontend (search form, route-strip results,
+and the loading / empty / error / validation states). Backend verified against
+all six instruction test cases, an exhaustive all-pairs invariant sweep, and
+full endpoint error-path coverage; the frontend builds clean and its rendering
+logic is checked against live API responses. Remaining: a final polish pass and
+expanding this README into the full architecture / tradeoffs / "what I'd improve"
+write-up.
